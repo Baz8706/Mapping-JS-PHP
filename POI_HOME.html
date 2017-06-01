@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1.0">
+      <title> Points of Interest </title>
+      <link rel='stylesheet' type='text/css' href='/ewt/jquery-ui.css' />
+      <script type='text/javascript' src='/ewt/jquery.min.js'></script>
+      <script type='text/javascript' src='/ewt/jquery-ui.min.js'></script>
+      <script type='text/javascript' src='/wad/leaflet/leaflet.js'></script>
+      <link rel='stylesheet' type='text/css' href='/wad/leaflet/leaflet.css'/>
+	  <style>
+		 @media only screen and (min-width: 800px)
+	{
+	#body
+	{
+		background-color: 	#a9d0d3;
+		font-family: Arial, Helvetica, sans-serif;
+	}
+    #lmap 
+    {
+        width: 800px;
+        height: 600px;
+		display: inline-block;
+    }
+	#title
+	{
+	display: inline-block;
+	}
+	#btn1
+	{
+	width: 80px; height: 80px; background: url(panels.png) center no-repeat; margin-left: 20px;text-align: left; font-weight: bold; color: white;
+	}
+	#btn2
+	{
+	width: 80px; height: 80px; background: url(map.png) center no-repeat;font-size: 20px; font-weight: bold; color: white;
+	}
+	#results
+	{
+		width: auto;
+		height: 600px;
+		font-size: 16px;
+		text-align: center;
+		font-family: Arial, Helvetica, sans-serif;
+		overflow-y: scroll;
+		display: inline-block;
+	}
+	}
+	@media only screen and (max-width: 480px) 
+	{
+	#body
+	{
+		background-color: 	#a9d0d3;
+		font-family: Arial, Helvetica, sans-serif;
+	}
+    #lmap
+    {
+        width: 400px;
+        height: 320px;
+    }
+	#title
+	{
+		font-size: 16px;
+		font-family: Arial, Helvetica, sans-serif;
+		width: auto;
+	
+	}
+    
+	#title
+	{
+	float:left;
+	}
+	#btn1
+	{
+	width: 60px; height: 60px; background: url(panels.png) center no-repeat; margin-left: 20px;text-align: left; font-weight: bold; color: white;
+	}
+	#btn2
+	{
+	width: 60px; height: 60px; background: url(map.png) center no-repeat;font-size: 20px; font-weight: bold; color: white;
+	}
+	#results
+	{
+		width: 400px;
+		height:250px;
+		font-size: 10px;
+		text-align: center;
+		font-family: Arial, Helvetica, sans-serif;
+		overflow-y: scroll;
+		position:absolute;
+	}
+	#foot
+	{
+		position:absolute;
+		bottom:0;
+		width:100%;
+		height:12px;
+		padding-top:5px;
+	}
+	}
+	    
+	  </style>
+      <script type='text/javascript'>
+    var pins = L.layerGroup();
+	var map;
+	
+	console.log(dragen);
+	//Start jQuery Dialogs etc
+    function startup() {
+
+        $('#search').dialog({
+            autoOpen: false,
+            modal: true,
+            width: 400,
+            title: "Search",
+            buttons: {
+                'Search': okHandler,
+					'Cancel': cancelHandler,
+						'Clear Pins': clearMarker
+            }
+        })
+        $('#btn1').click(showDialog);
+
+        $('#addpoi').dialog({
+            autoOpen: false,
+            modal: true,
+            width: 400,
+            title: "Add POI",
+            buttons: {
+                'Add PoI': addHandler,
+					'Cancel': closeHandler,
+						'Clear Pins': clearMarker
+            }
+        })
+        $('#btn2').click(showDialog2);
+		
+		$('#poireview').dialog({
+            autoOpen: false,
+            modal: true,
+            width: 400,
+            title: "Review POI",
+            buttons: {
+                'Add Review': addRev,
+					'Cancel': closeHandler2,
+						'Clear Pins': clearMarker
+            }
+        })
+			$('#alert').dialog({
+            autoOpen: false,
+            modal: true,
+            width: 400,
+            title: "!Alert!",
+            buttons: {
+					'OK': closeHandler3,
+            }
+        })
+		}
+	
+	 //AJAX To Get All Countries for Add POI form
+
+    function ajaxcountry() {
+
+        $.ajax('https://restcountries.eu/rest/v1/all', {
+            type: 'GET',
+            data: 'format=json',
+            success: onAllconuntry
+        });
+			var g = document.getElementById('buttons');
+			var but = document.createElement("button");
+			var t = document.createTextNode("Toggle Pins");
+			but.type = "button";
+			but.addEventListener("click", setDragen);
+			but.appendChild(t);
+			g.appendChild(but);						}
+
+    function onAllconuntry(data, status, xmlHTTP) {
+		
+		var cntry = document.getElementById('country');
+        for (var i = 0; i < data.length; i++) {	
+			
+		var optn = document.createElement('option');
+		optn.value = data[i].name;
+		optn.innerHTML = data[i].name;
+		cntry.appendChild(optn);
+}	
+}
+        	
+	 //Leaflet Map
+
+    function init() {
+        map = L.map("lmap");
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(processPosition, handleError);
+        } 
+		else {
+        alert("Sorry, geolocation not supported in this browser or access denied.");
+        }
+		map.on('dragend', DragEnd);
+		}
+		var dragen = false;
+		function setDragen(){
+		if (dragen == true)
+		{
+			dragen = false;
+			clearMarker();
+			alert("Auto pin generation Off!");
+		}
+		else if (dragen == false)
+		{
+			dragen = true;
+			alert("Auto pin generation On!")
+		}
+		console.log(dragen);
+		}
+
+		function DragEnd(e){
+		if (dragen == false)
+		{
+			//Do nothing
+			
+		}
+		else if (dragen == true)
+		{ 
+		var east = map.getBounds().getEast(); 
+		var west = map.getBounds().getWest();
+		var north = map.getBounds().getNorth(); 
+		var south = map.getBounds().getSouth();
+		pins.clearLayers()
+		console.log(east);
+		console.log(west);
+		console.log(north);
+		console.log(south);
+		$.ajax('/~dcooper/POI/APINS.php', {
+            type: 'GET',
+            data: 'east=' + east + '&west=' + west + '&north=' + north + '&south=' + south + '&format=json',
+            success: AddPins
+        });
+		}
+		
+    };
+
+	// Get user's location
+    function processPosition(pos) {
+        var attrib = "Map data copyright OpenStreetMap contributors, Open Database License";
+        L.tileLayer("http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: attrib
+        }).addTo(map);
+        var pos = new L.LatLng(pos.coords.latitude, pos.coords.longitude);
+        map.setView(pos,12);
+        map.on("click", onMapClick);
+    }
+
+    function handleError(err) {
+        alert('An error occured: ' + err.code);
+    }
+
+    function onMapClick(e) {
+        $('#lon').val(e.latlng.lng);
+        $('#lat').val(e.latlng.lat);
+        $('#addpoi').dialog('open');		
+    }
+
+	
+	//Ajax POI Search request 
+	
+    function ajaxrequest() {
+        var r = $('#region').val();
+        var t = $('#type').val();
+        $.ajax('/~dcooper/POI/POI_LOOKUP.php', {
+            type: 'GET',
+            data: 'type=' + t + '&region=' + r + '&format=json',
+            success: onSuccess
+        });
+    }
+	
+    //Process Status Code of search and display relevant message or parse results
+	
+    function onSuccess(data, status, xmlHTTP) {
+        if (xmlHTTP.status === 204) {
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("Sorry, there are no records matching your search.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+        } 
+		
+		else if (xmlHTTP.status === 449) {
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("Gone a bit overboard with your search criteria huh? Try again.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+        } 
+		
+		else if (xmlHTTP.status === 200) {
+		
+		
+		//Create Table of Results
+		
+		var table = document.createElement('table');
+		table.id = "tabler";
+		var th = document.createElement('th');
+		var th1 = document.createElement('th');
+		var th2 = document.createElement('th');
+		var th3 = document.createElement('th');
+		var th4 = document.createElement('th');
+		var th5 = document.createElement('th');
+		var thr = document.createTextNode('Name');
+		var thr1 = document.createTextNode('Type');
+		var thr2 = document.createTextNode('Country');
+		var thr3 = document.createTextNode('Region');
+		var thr4 = document.createTextNode('Lon');
+		var thr5 = document.createTextNode('Lat');
+	
+		th.appendChild(thr);
+		th1.appendChild(thr1);
+		th2.appendChild(thr2);
+		th3.appendChild(thr3);
+		th4.appendChild(thr4);
+		th5.appendChild(thr5);
+		table.appendChild(th);
+		table.appendChild(th1);
+		table.appendChild(th2);
+		table.appendChild(th3);
+		table.appendChild(th4);
+		table.appendChild(th5);
+		
+		for (var i = 0; i < data.length; i++){
+		var tr = document.createElement('tr');
+		var td1 = document.createElement('td');
+		var td2 = document.createElement('td');
+		var td3 = document.createElement('td');
+		var td4	= document.createElement('td');
+		var td5 = document.createElement('td');
+		var td6 = document.createElement('td');
+		var btnr = document.createElement("button");
+		btnr.id="btn_" + data[i].ID;
+		btnr.value = data[i].name;
+		btnr.addEventListener("click", getID);
+		btnr.addEventListener("click", showDialog3);
+		
+		var text1 = document.createTextNode(data[i].name);
+		var text2 = document.createTextNode(data[i].type);
+		var text3 = document.createTextNode(data[i].country);
+		var text4 = document.createTextNode(data[i].region);
+		var text5 = document.createTextNode(data[i].lon);
+		var text6 = document.createTextNode(data[i].lat)
+		var btnrt = document.createTextNode("Add a Review");
+		
+		td1.appendChild(text1);
+		td2.appendChild(text2);
+		td3.appendChild(text3);
+		td4.appendChild(text4);
+		td5.appendChild(text5);
+		td6.appendChild(text6);
+		btnr.appendChild(btnrt);
+		tr.appendChild(td1);
+		tr.appendChild(td2);
+		tr.appendChild(td3);
+		tr.appendChild(td4);
+		tr.appendChild(td5);
+		tr.appendChild(td6);
+		tr.appendChild(btnr);
+		table.appendChild(tr);
+		$('#results').html(table);
+		
+
+        //Create markers for map pins
+		
+			var c = document.createElement('p');
+			var b =	document.createElement('p');
+			var e = document.createElement('p');
+			var bt = document.createElement('p');
+			var btn = document.createElement('button');
+			var t = document.createTextNode("Add a Review");
+			var d = document.createTextNode(data[i].name);
+			var a = document.createTextNode(data[i].type);
+			var f = document.createTextNode(data[i].description);
+			
+			btn.type = "button";
+			btn.id="btn_" + data[i].ID;
+			btn.value = data[i].name;
+			btn.addEventListener('click', getID);
+			btn.addEventListener('click', showDialog3);
+			btn.appendChild(t);
+			c.appendChild(d);
+			c.appendChild(b);
+			b.appendChild(a);
+			c.appendChild(e);
+			e.appendChild(f);
+			bt.appendChild(btn);
+			c.appendChild(btn);
+			
+			pin = L.marker([data[i].lat, data[i].lon]);
+            pins.addLayer(pin);
+            pin.bindPopup(c);
+            }
+            map.addLayer(pins);
+            console.log(data);
+			console.log(xmlHTTP.status);
+			map.setView( new L.LatLng(data[0].lat,data[0].lon), 5);
+        }
+    }
+	   //Send Ajax Add POI Request
+	
+    function ajaxadd() {
+        var username = $('#username').val();
+        var password = $('#pass').val();
+        var name = $('#name').val();
+        var cntry = $('#country').val();
+        var reg = $('#region1').val();
+        var typ = $('#type1').val();
+        var des = $('#desc').val();
+        var lon = $('#lon').val();
+        var lat = $('#lat').val();
+
+		var xhr2 = new XMLHttpRequest();
+		var addata = new FormData();
+		addata.append("name", name);
+		addata.append("country", cntry);
+		addata.append("region", reg);
+		addata.append("type", typ);
+		addata.append("desc", des);
+		addata.append("lon", lon);
+		addata.append("lat", lat);
+		/*addata.append("pass", password);
+		addata.append("user", username);*/
+		xhr2.addEventListener("load", onAddSuccess);
+		xhr2.open("POST", "/~dcooper/POI/ADDPOI.php");
+		xhr2.setRequestHeader("Authorization","Basic " + btoa(username + ":" + password));
+		xhr2.send(addata);
+    }
+	
+	// Process header returned for POI add request
+	
+	function onAddSuccess(e)
+	{
+	var status = e.target.status;
+	console.log(status);
+		if (status === 401)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("Your username and/or password isn't present or correct.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}
+		else if (status === 449)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("It seems a you haven't filled in a required field, try again please.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}
+		else if (status === 406)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("The longitude and/or lattitude entered are invalid. Try again.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}
+		else if (status === 409)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("Oops, this POI seems to exist already and cannot be added again.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}
+		else if (status === 201)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("Thanks, your POI has been added.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+			pin = L.marker([$('#lat').val(),$('#lon').val()]);
+			pins.addLayer(pin);
+			map.addLayer(pins);
+			pin.bindPopup("<p>" + $('#name').val() + "</p>" + $('#type1').val() + "<p>" + $('#desc').val() +"</p>");
+		}
+	}
+	
+	
+	//Add pins to map as user drags mouse
+	
+	function AddPins(data, status, xmlHTTP){
+	
+	if (xmlHTTP.status === 200) {
+	
+	for (var i = 0; i < data.length; i++) {
+		pin = L.marker([data[i].lat, data[i].lon]);
+
+			var c = document.createElement("p");
+			var b =	document.createElement("p");
+			var e = document.createElement("p");
+			var bt = document.createElement("p");
+			var btn = document.createElement("button");
+			var t = document.createTextNode("Add a Review");
+			var d = document.createTextNode(data[i].name);
+			var a = document.createTextNode(data[i].type);
+			var f = document.createTextNode(data[i].description);
+			
+			btn.type = "button";
+			btn.id="btn_" + data[i].ID;
+			btn.value = data[i].name;
+			btn.addEventListener("click", getID);
+			btn.addEventListener("click", showDialog3);
+			
+			btn.appendChild(t);
+			c.appendChild(d);
+			c.appendChild(b);
+			b.appendChild(a);
+			c.appendChild(e);
+			e.appendChild(f);
+			bt.appendChild(btn);
+			c.appendChild(bt);
+			pins.addLayer(pin);
+			pin.bindPopup(c);
+	
+            }
+            map.addLayer(pins);
+            console.log(data);
+            console.log(xmlHTTP.status);
+			}
+			
+		else{
+				}		
+			//Do nothing
+		}
+		
+	//Ajax request to add review of POI		
+	
+	function revadd() {
+			var username = $('#user2').val();
+			var password = $('#pass2').val();
+			var rev = $('#rev').val();
+			var ID = $('#id').val();
+			var xhr2 = new XMLHttpRequest();
+			var addata = new FormData();
+			addata.append("id", ID);
+			addata.append("rev", rev);
+			/*addata.append("pass", password);
+			addata.append("user", username);*/
+			xhr2.addEventListener("load", revSuccess);
+			xhr2.open("POST", "/~dcooper/POI/ADDREVIEW.php");
+			xhr2.setRequestHeader("Authorization","Basic " + btoa(username + ":" + password));
+			xhr2.send(addata);
+			}
+			
+	//Process response from review web service
+			
+	function revSuccess(e){
+				
+		var status = e.target.status;		
+		if (status === 401)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("Your username and/or password isn't present or correct.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}
+		else if (status === 400)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("No POI ID present, a review cannot be added.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}
+		else if (status === 449)
+		{
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("You can't review a POI without filling in the review...");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}
+		else if (status === 404)
+		{	
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("The POI you want to review doesn't seem to exist, try again.");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}	
+		else if (status === 200)
+		{	
+			var alr = document.getElementById('alert');
+			var msg = document.createTextNode("Thanks, your review has been added!");
+			var html = document.createElement('p');
+			html.appendChild(msg);
+			alr.appendChild(html);
+			$('#alert').html(html);
+			$('#alert').dialog('open');
+		}	
+	}		
+			
+	   $(startup);
+	
+//Dialog Boxes/Search Buttons & Functions
+
+	function clearMarker() {
+        pins.clearLayers();
+    }
+
+	//Find POI Dialog Functions
+	
+    function showDialog() {
+        $('#search').dialog('open');
+    }
+
+    function okHandler() {
+        $('#search').dialog(ajaxrequest());
+        $('#search').dialog('close');
+    }
+
+    function cancelHandler() {
+        $('#search').dialog('close');
+    }
+
+	
+//Add POI Dialog Functions	
+		
+    function showDialog2() {
+		pins.clearLayers();
+        $('#lon').val('');
+        $('#lat').val('');
+        $('#addpoi').dialog('open');
+    }
+
+    function closeHandler() {
+        $('#addpoi').dialog('close');
+    }
+
+    function addHandler() {
+        $('#addpoi').dialog(ajaxadd());
+		$('#addpoi').dialog('close');
+    }
+	
+//Review POI Dialog functions	
+	function getID(e){
+	var POIid = e.target.id.substring(4);
+	var Pname = e.target.value;
+	$('#id').val(POIid);
+	$('#p1').text(Pname);
+	
+	}
+	
+	function showDialog3(){
+		$('#poireview').dialog('open');
+	
+	}
+	function addRev(){
+		$('#poireview').dialog(revadd());
+		$('#poireview').dialog('close');
+	
+	}
+	
+	function closeHandler2(){
+		$('#poireview').dialog('close');
+	
+	}
+	function closeHandler3(){
+	$('#alert').dialog('close');
+	
+	}	
+</script>
+   </head>
+   <body id="body" onload='ajaxcountry();init();startup();'>
+      <header>
+	  
+	<div id="buttons">
+	<div>
+      <h1 id="title" style="margin-left: 10px;"><img class="logo" alt="POI" src="kayak.png"/>  Points of Interest</h1>      
+	</div>
+	<input id="btn1" type="Button"  value="Find"/>
+    <input id="btn2" type="Button" value="Add" />
+	</div>
+
+      <div id="lmap"  style="z-index: 1;">
+         <!--Map-->
+      </div>
+	  <div id="results">
+         <!--AJAX-->
+      </div>
+      <div id="search">
+         <fieldset>
+            <legend>Point of Interest Search</legend>
+            <form class="log" method="get" action="">
+               <label for="region">Region:</label>
+               <br/>
+               <input id="region" type="text"value="" />
+               <br/>
+               <label for="type">Type:</label>
+               <br/>
+               <select id="type" name="type">
+                  <option value="any">Any</option>
+                  <option value="city">City</option>
+                  <option value="hill">Hill</option>
+                  <option value="industrial estate">Industrial Estate</option>
+                  <option value="moor">Moor</option>
+                  <option value="pub">Pub</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="touristsite">Tourist site</option>
+                  <option value="town">Town</option>
+				  <option value="mountain">Mountain</option>
+               </select>
+            </form>
+         </fieldset>
+      </div>
+      <div id="addpoi">
+         <form method="post" action="">
+            <fieldset>
+               <legend>User Details</legend>
+               <label for="username">Username:</label>
+               <br/>
+               <input id="username"type="text" name="username" />
+               <br/>
+               <label for="password">Password:</label>
+               <br/>
+               <input id="pass" type="password" name="password" />
+            </fieldset>
+            <fieldset>
+               <legend>Point of Interest Details</legend>
+               <label for="name">Name:</label>
+               <br/>
+               <input id="name" type="text" value=""/>
+               <br/>
+               <label for="country">Country:</label>
+               <br/>
+               <select id="country" name="country">
+                  <!--AJAX Country-->
+               </select>
+               <br/>
+               <label for="region">Region:</label>
+               <br/>
+               <input  id="region1" name="region" type="text"value="" />
+               <br/>
+               <label for="type">Type:</label>
+               <br/>
+               <select id="type1" name="type">
+                  <option value="-"> - </option>
+                  <option value="city">City</option>
+                  <option value="hill">Hill</option>
+                  <option value="industrial estate">Industrial Estate</option>
+                  <option value="moor">Moor</option>
+                  <option value="pub">Pub</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="touristsite">Tourist site</option>
+                  <option value="town">Town</option>
+				  <option value="mountain">Mountain</option>
+               </select>
+               <br/>
+               <label for="desc">Description</label>
+               <br/>
+               <textarea id="desc" rows='4' cols='30' type='text' name='desc' value='Desc'></textarea>
+               <br>
+               <label for="lon">Longitude</label>
+               <br/>
+               <input id="lon" name="lon" type="number" step="any" />
+               <br/>
+               <label for="lat">Latitude</label>
+               <br/>
+               <input id="lat" name="lat" type="number" step="any"/>
+            </fieldset>
+         </form>
+      </div>
+	  <div id="poireview">
+		<fieldset>
+		<legend>User Details</legend>
+		<form method="post" action="">
+		<label for="user">Username: </label>
+		<br/>
+		<input type="text" name="user" id="user2"/><br/>
+		<label for="password">Password:  </label>
+		<br/>
+		<input type="password" name="password" id="pass2">
+		<input type="hidden" id="id" />
+		</fieldset>
+		<fieldset>
+		<legend>Review of</legend>
+		<h3 id="p1"></h3>
+		<textarea  rows='4' cols='33' type='text' name='rev' value='rev' id="rev"></textarea><br>
+		</div>
+	  <div id="alert" title="!">
+	  </div>
+      <footer id="foot">
+         <p style="font-size: 10px;"> Icons made by Anatoly from http://a-maslennikov.com/ </p>
+      </footer>
+   </body>
+</html>
