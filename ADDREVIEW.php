@@ -44,13 +44,13 @@ ELSE
 			
 			IF ($row == FALSE)
 			{
-				header("HTTP/1.1 404 Not Found");
+				header("HTTP/1.1 449 Retry With");
 			}	
 				ElSE IF (!isset($rev) || $rev =="")
 				{
 					header("HTTP/1.1 449 Retry With");
 				}
-					ELSE  
+					ELSE 
 					{
 						$statement = $conn->prepare("INSERT INTO poi_reviews (poi_id, review) VALUES (?, ?);");
 						$statement->bindparam(1, $id);
